@@ -1,77 +1,130 @@
-# Healthcare Readmission Risk Pipeline
+# Healthcare Readmission Pipeline
 
-An end-to-end analytics engineering project that builds a data pipeline for predicting 30-day hospital readmission risk. The pipeline covers synthetic data generation, layered transformations following the Medallion architecture, statistical validation, predictive modelling, and a structured Power BI reporting layer.
+End-to-end analytics pipeline for 30-day hospital readmission risk prediction.
+Architecture: Medallion (Bronze / Silver / Gold) -- dbt -- PostgreSQL -- Python -- Power BI.
 
 ---
 
 ## Problem Statement
 
-Unplanned hospital readmissions within 30 days of discharge represent a significant clinical and economic burden. Identifying patients at elevated risk before discharge enables care teams to prioritise follow-up interventions, adjust discharge protocols, and allocate resources more effectively.
+Unplanned hospital readmissions within 30 days of discharge represent one of the most
+significant quality and cost challenges in healthcare. In France, readmission rates
+consistently exceed 15% across major pathologies such as heart failure, COPD, and
+sepsis. Each preventable readmission carries both a direct financial cost for the
+healthcare system and a measurable clinical risk for the patient.
 
-This project addresses the following question: given a patient's clinical profile at the time of discharge, can we estimate the probability that they will be readmitted within 30 days?
+The challenge addressed by this project is the following: given a set of clinical and
+administrative variables collected at the time of a hospital stay, can we predict with
+sufficient accuracy which patients are at high risk of being readmitted within 30 days
+of discharge?
 
-The dataset covers eight pathologies (cardiac failure, type 2 diabetes, COPD, pneumonia, chronic kidney disease, stroke, sepsis, femoral fracture), eight hospital services, and eight French regions. The synthetic cohort contains 50,000 patient stays generated with reproducible random seeds to allow full reproducibility of all results.
+Early identification of at-risk patients allows care teams to act before discharge:
+reinforce medication education, schedule follow-up appointments, coordinate with home
+care services, or extend the hospital stay when clinically justified.
 
 ---
 
-## Solution Architecture
+## Solution
 
-The pipeline is organised into four layers.
+This project builds a complete data pipeline from raw data ingestion to a Power BI
+business intelligence layer, structured around three analytical stages:
 
-### Bronze Layer - Raw Ingestion
+**Stage 1 -- Data Engineering (Bronze and Silver layers)**
 
-The ingestion script (`ingestion/load_bronze.py`) generates a synthetic patient cohort using the Faker library and loads it into a PostgreSQL table (`bronze.patients_raw`). The generation logic encodes realistic clinical risk factors: age above 70, polypharmacy, prior hospitalisations, complex discharge destination, and pathology-specific baseline rates all increase the probability of readmission. The resulting readmission rate across the full cohort is approximately 28 percent, reflecting published figures for high-complexity hospital populations.
+Raw synthetic patient data is generated using the Python Faker library and ingested
+into PostgreSQL. The Silver layer, implemented in dbt, applies data cleaning, type
+casting, deduplication, and feature derivation. Three staging models are produced:
+patient demographics, stay metrics, and diagnostic enrichment via a simplified
+ICD-10 reference table.
 
-### Silver Layer - Cleaning and Enrichment
+**Stage 2 -- Machine Learning and Statistical Analysis (Gold layer and Python notebooks)**
 
-Three dbt models transform the raw data into analysis-ready views.
+The Gold layer consolidates the Silver models into a feature store table consumed
+by the prediction pipeline. Three Jupyter notebooks cover exploratory data analysis,
+statistical validation of features (chi-square, Mann-Whitney, VIF), and a logistic
+regression model with stratified cross-validation. The model outputs a continuous
+risk score between 0 and 1 for each patient stay.
 
-`stg_patients` applies explicit type casting, text normalisation, and exclusion of corrupted records (null age, age outside 18-95). It derives age brackets, stay duration categories, binary flags for polypharmacy and complex discharge, and temporal extraction columns.
+**Stage 3 -- Business Intelligence (Power BI)**
 
-`stg_sejours` computes stay-level metrics: a z-score for stay duration normalised within pathology group, a composite complexity index (stay duration 35%, medication count 30%, prior hospitalisations 35%), and a therapeutic intensity ratio.
-
-`stg_diagnostics` enriches each record with ICD-10 group mapping, relative severity scores, chronicity and criticality flags, and a pathology-level readmission risk classification.
-
-### Gold Layer - Analytical Tables
-
-Two dbt models produce the final analytical outputs.
-
-`mart_patient_features` is the ML feature store: one row per stay, 21 features (10 continuous, 7 binary, 4 categorical), and the binary target variable `readmission_30j`. This table feeds the prediction notebooks directly.
-
-`mart_readmission_kpis` contains pre-aggregated KPIs in long format across five dimensions (pathology, service, region, age bracket, month). It is the primary source for Power BI, requiring no further DAX transformation for aggregation.
-
-### Analytical and Reporting Layer
-
-Three Python notebooks cover the full analytical workflow. The exploration notebook documents distributions, class balance, correlation structure, and dimension-level readmission rates. The statistical testing notebook validates feature-target associations with D'Agostino-Pearson normality tests, chi-squared tests with Cramer's V effect size, Mann-Whitney U tests, Kruskal-Wallis tests, and VIF multicollinearity analysis. The prediction notebook trains and evaluates a logistic regression model with a full sklearn pipeline (StandardScaler, OneHotEncoder, class weighting), stratified 5-fold cross-validation, ROC and precision-recall curves, bootstrap confidence intervals on coefficients, and export of patient-level risk scores.
-
-The Power BI layer (`powerbi/dax_measures.dax`) provides 56 DAX measures organised in seven folders: global KPIs, risk scores, pathology analysis, time intelligence, demographics, alert thresholds, and model performance metrics. Four RLS roles control data access by profile. Two calculated tables (DimDate 2022-2027, DimUtilisateurs) support time-intelligence functions and dynamic row-level security via USERPRINCIPALNAME().
+The risk scores and aggregated KPIs are exposed in a Power BI semantic model
+with 56 DAX measures organized into 7 folders, row-level security for 4 user
+profiles, a calendar dimension for time-intelligence functions, and a user mapping
+table for dynamic RLS filtering.
 
 ---
 
 ## Results
 
-The logistic regression model trained on the full 21-feature set achieves the following performance on the held-out test set (20% stratified split, 10,000 stays):
+| Metric              | Target value |
+|---------------------|-------------|
+| AUC-ROC             | >= 0.78     |
+| F1-Score (class 1)  | >= 0.65     |
+| Overall accuracy    | >= 0.76     |
+| KS Statistic        | >= 0.30     |
 
-| Metric | Value |
-|---|---|
-| AUC-ROC | 0.80 - 0.83 |
-| F1-Score (class 1) | 0.65 - 0.70 |
-| Average Precision | 0.58 - 0.63 |
-| Sensitivity | 0.70 - 0.75 |
-| Specificity | 0.74 - 0.78 |
+Statistical validation confirms that all selected features are significant at the
+0.001 level. No multicollinearity is detected (all VIF values below 5). The
+non-normal distribution of continuous variables is handled with non-parametric
+tests (Mann-Whitney U, Kruskal-Wallis).
 
-The top three predictive features by coefficient magnitude are prior hospitalisations, age-by-hospitalisations interaction, and polypharmacy flag. All features pass the Mann-Whitney significance threshold (p < 0.001) and VIF remains below 3.5 for all continuous variables, confirming the absence of collinearity.
-
-Cross-validation AUC across five stratified folds is stable (standard deviation below 0.01), indicating that the model generalises consistently across data splits.
+The Power BI model enables hospital staff to monitor readmission rates by service,
+region, pathology, and patient risk tier, with real-time alert thresholds and
+year-over-year comparison.
 
 ---
 
-## Repository Structure
+## Architecture
+
+```
+Source: Synthetic hospital data (Python / Faker)
+  |
+  v
+Bronze Layer
+  load_bronze.py
+  PostgreSQL -- schema: bronze
+  Table: bronze.patients_raw
+  No transformation -- raw ingestion with timestamp logging
+  |
+  v
+Silver Layer
+  dbt models -- materialized as views
+  stg_patients     : type casting, normalization, quality filters
+  stg_sejours      : stay metrics, complexity index, risk flags
+  stg_diagnostics  : ICD-10 enrichment, clinical group mapping
+  |
+  v
+Gold Layer
+  dbt models -- materialized as tables
+  mart_patient_features : feature store for ML (21 features)
+  mart_readmission_kpis : pre-aggregated KPIs for Power BI (5 dimensions)
+  |
+  v
+Python Analysis
+  01_exploration.ipynb       : EDA, distributions, correlation
+  02_statistical_tests.ipynb : chi-square, Mann-Whitney, VIF, normality
+  03_prediction_model.ipynb  : logistic regression, cross-validation, risk scores
+  Output: scores_risque_patients.csv
+  |
+  v
+Power BI Semantic Model
+  56 DAX measures across 7 folders
+  4 RLS roles (Direction, Service Manager, Risk Analyst, Physician)
+  DimDate 2022-2027 for time-intelligence
+  DimUtilisateurs for dynamic RLS via USERPRINCIPALNAME()
+```
+
+---
+
+## Project Structure
 
 ```
 healthcare-readmission-pipeline/
-|-- ingestion/
-|   |-- load_bronze.py          Synthetic data generation and PostgreSQL loading
+|
+|-- README.md
+|-- requirements.txt
+|-- load_bronze.py
+|
 |-- dbt_project/
 |   |-- dbt_project.yml
 |   |-- packages.yml
@@ -81,105 +134,187 @@ healthcare-readmission-pipeline/
 |   |   |   |-- stg_patients.sql
 |   |   |   |-- stg_sejours.sql
 |   |   |   |-- stg_diagnostics.sql
-|   |   |   |-- schema.yml
-|   |   |-- gold/
+|   |   |   `-- schema.yml
+|   |   `-- gold/
 |   |       |-- mart_patient_features.sql
 |   |       |-- mart_readmission_kpis.sql
-|   |       |-- schema.yml
-|   |-- tests/
-|   |   |-- assert_no_negative_age.sql
-|   |   |-- assert_date_sortie_apres_admission.sql
-|   |   |-- assert_no_duplicate_features.sql
-|   |   |-- assert_taux_readmission_plausible.sql
+|   |       `-- schema.yml
 |   |-- macros/
-|       |-- safe_ratio.sql
-|       |-- classify_risk.sql
-|-- notebooks/
-|   |-- 01_exploration.py
-|   |-- 02_statistical_tests.py
-|   |-- 03_prediction_model.py
-|-- powerbi/
-|   |-- dax_measures.dax
-|-- requirements.txt
-|-- .gitignore
+|   |   |-- classify_risk.sql
+|   |   `-- safe_ratio.sql
+|   `-- tests/
+|       |-- assert_no_negative_age.sql
+|       |-- assert_no_duplicate_features.sql
+|       |-- assert_date_sortie_apres_admission.sql
+|       `-- assert_taux_readmission_plausible.sql
+|
+|-- analysis/
+|   |-- 01_exploration.ipynb
+|   |-- 02_statistical_tests.ipynb
+|   `-- 03_prediction_model.ipynb
+|
+`-- powerbi/
+    `-- dax_measures.dax
 ```
 
 ---
 
-## Lineage
+## Dataset
 
-```
-bronze.patients_raw  (PostgreSQL, generated by load_bronze.py)
-        |
-        v
-  silver.stg_patients
-        |
-        |--------> silver.stg_diagnostics
-        |
-        v
-  silver.stg_sejours
-        |
-        v
-  gold.mart_patient_features  -->  notebooks/03_prediction_model.py
-        |
-        v
-  gold.mart_readmission_kpis  -->  Power BI Dashboard
-```
+Data is entirely synthetic, generated with the Python Faker library. The generation
+logic is designed to produce medically coherent distributions: older patients with
+multiple prior hospitalizations, high medication counts, or complex discharge modes
+have a structurally higher probability of readmission.
 
----
+Approximately 50,000 patient stays are generated, covering 8 pathologies aligned
+with the French hospital system (GHM / ICD-10).
 
-## Setup
-
-**Prerequisites:** Python 3.11+, PostgreSQL 14+, dbt-postgres 1.7+
-
-Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-Configure the database connection:
-```bash
-cp dbt_project/profiles.yml.example ~/.dbt/profiles.yml
-# Edit with your PostgreSQL credentials
-```
-
-Run ingestion:
-```bash
-python ingestion/load_bronze.py
-```
-
-Run dbt transformations:
-```bash
-cd dbt_project
-dbt deps
-dbt run
-dbt test
-```
-
-Run notebooks in order (01, 02, 03) using Jupyter or VS Code with the Jupyter extension.
-
-For the Power BI layer, connect Power BI Desktop to PostgreSQL, load `mart_patient_features` and `mart_readmission_kpis`, then import measures from `powerbi/dax_measures.dax`. Create DimDate and DimUtilisateurs as calculated tables as documented in the DAX file.
+| Variable                        | Type        | Description                              |
+|---------------------------------|-------------|------------------------------------------|
+| patient_id                      | UUID        | Unique stay identifier                   |
+| age                             | Integer     | Patient age at admission (18-95)         |
+| sexe                            | Categorical | M / F                                    |
+| pathologie                      | Categorical | Heart failure, COPD, Diabetes, etc.      |
+| diagnostic_principal            | String      | Simplified ICD-10 code                   |
+| service                         | Categorical | Cardiology, Pulmonology, etc.            |
+| hopital_region                  | Categorical | French administrative region             |
+| duree_sejour                    | Integer     | Length of stay in days (1-45)            |
+| nb_hospitalisations_precedentes | Integer     | Prior hospitalizations (12-month window) |
+| nb_medicaments                  | Integer     | Number of prescribed medications         |
+| mode_sortie                     | Categorical | Home, SSR, EHPAD, Transfer, Death        |
+| readmission_30j                 | Binary      | Target variable (0 / 1)                  |
 
 ---
 
-## Data Quality Tests
+## Statistical and Modeling Approach
 
-14 automated dbt tests are defined across all models.
+The modeling pipeline follows a rigorous statistical workflow:
 
-| Layer | Model | Schema tests | Singular tests |
-|---|---|---|---|
-| Silver | stg_patients | 12 | assert_no_negative_age, assert_date_sortie_apres_admission |
-| Silver | stg_sejours | 4 | - |
-| Silver | stg_diagnostics | 4 | - |
-| Gold | mart_patient_features | 10 | assert_no_duplicate_features, assert_taux_readmission_plausible |
-| Gold | mart_readmission_kpis | 6 | - |
+1. Normality testing (D'Agostino-Pearson) on all continuous variables.
+   All variables are confirmed non-normal, justifying the use of non-parametric tests.
+
+2. Feature significance testing.
+   Chi-square test for categorical variables vs. the target (pathology, service,
+   discharge mode, sex). Cramer's V is computed for effect size.
+   Mann-Whitney U test for continuous variables between readmission groups.
+   Effect size r is reported alongside p-values.
+
+3. Multicollinearity check (VIF).
+   All features show VIF below 5, confirming the absence of problematic collinearity.
+
+4. Kruskal-Wallis test for age distribution across pathology groups.
+
+5. Logistic regression with class_weight='balanced' to handle the natural
+   class imbalance (approximately 25-30% positive class). Pipeline includes
+   StandardScaler for numerical features and OneHotEncoder for categorical features.
+
+6. Validation via stratified 5-fold cross-validation. Bootstrap confidence
+   intervals (200 iterations) are computed for AUC-ROC, F1, precision, and recall.
+   Feature importance is extracted from model coefficients with 95% bootstrap intervals.
 
 ---
 
 ## Technical Stack
 
-- Data generation: Python 3.11, Faker, NumPy
-- Storage: PostgreSQL 14
-- Transformations: dbt-postgres 1.7 with dbt-utils
-- Analysis: pandas, scipy, statsmodels, scikit-learn, matplotlib, seaborn
-- Reporting: Power BI Desktop, DAX
+| Layer                 | Technology                                  |
+|-----------------------|---------------------------------------------|
+| Data generation       | Python 3.11, Faker 24.0                     |
+| Storage               | PostgreSQL 15                               |
+| Transformation        | dbt Core                                    |
+| Statistical analysis  | scipy, statsmodels                          |
+| Machine learning      | scikit-learn 1.4                            |
+| Business intelligence | Power BI Desktop, DAX                       |
+| Version control       | Git / GitHub                                |
+
+---
+
+## Setup and Usage
+
+**1. Clone the repository**
+
+```bash
+git clone https://github.com/23dede/healthcare-readmission-pipeline.git
+cd healthcare-readmission-pipeline
+```
+
+**2. Install Python dependencies**
+
+```bash
+pip install -r requirements.txt
+```
+
+**3. Configure PostgreSQL**
+
+Create the database before running the ingestion script:
+
+```bash
+psql -U postgres -c "CREATE DATABASE healthcare_dw;"
+```
+
+Database connection parameters can be set via environment variables:
+PG_HOST, PG_PORT, PG_DB, PG_USER, PG_PASSWORD.
+Default values point to localhost:5432/healthcare_dw.
+
+**4. Run the Bronze ingestion**
+
+```bash
+python load_bronze.py --rows 50000 --batch 1000
+```
+
+This script generates the synthetic dataset, saves a CSV to data/raw/, and
+inserts all records into bronze.patients_raw. Each run is logged in
+bronze.ingestion_logs.
+
+**5. Run the dbt pipeline**
+
+```bash
+cd dbt_project
+cp profiles.yml.example ~/.dbt/profiles.yml
+dbt deps
+dbt run
+dbt test
+```
+
+**6. Run the analysis notebooks**
+
+Open and execute in order:
+- analysis/01_exploration.ipynb
+- analysis/02_statistical_tests.ipynb
+- analysis/03_prediction_model.ipynb
+
+The third notebook exports scores_risque_patients.csv, which feeds the Power BI model.
+
+**7. Power BI configuration**
+
+Load mart_patient_features, mart_readmission_kpis, and scores_risque_patients.csv
+into Power BI Desktop. DAX measures are documented in powerbi/dax_measures.dax.
+The semantic model requires a DimDate table (2022-2027) and a DimUtilisateurs
+mapping table for dynamic RLS.
+
+---
+
+## Power BI Semantic Model
+
+The Power BI layer contains 56 DAX measures organized in 7 folders:
+
+- KPIs Globaux: total stays, readmission rate, average length of stay, age, medications
+- Scores de Risque: risk score distribution, high/moderate/low risk patient counts
+- Analyse Pathologie: pathology-level rates, deviation from global average, ranking
+- Analyse Temporelle: YTD, rolling 30 days, year-over-year delta, trend label
+- Demographie: senior (75+) rates, prior hospitalizations, male vs. female differential
+- Alertes et Seuils: alert color encoding, performance status, services above threshold
+- Metriques Modele: confusion matrix components, precision, recall, F1, KS statistic
+
+Row-level security is implemented for four roles:
+
+- Direction_Hopital: unrestricted access
+- Responsable_Service: filtered to the user's service via USERPRINCIPALNAME() lookup
+- Analyste_Risques: filtered to patients with risk score >= 0.40
+- Medecin_Traitant: filtered to the user's service via USERPRINCIPALNAME() lookup
+
+---
+
+## License
+
+MIT License. All data used in this project is entirely synthetic.
+No real patient data was used at any stage of development.
