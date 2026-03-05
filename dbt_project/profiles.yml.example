@@ -1,0 +1,27 @@
+# profiles.yml -- Connection configuration example
+# Do not version the real file (contains credentials)
+# Copy this file to ~/.dbt/profiles.yml and fill in your values
+
+healthcare_readmission:
+  target: dev
+  outputs:
+
+    dev:
+      type:     postgres
+      host:     localhost
+      port:     5432
+      dbname:   healthcare_dw
+      schema:   bronze
+      user:     "{{ env_var('DBT_USER', 'postgres') }}"
+      password: "{{ env_var('DBT_PASSWORD', 'postgres') }}"
+      threads:  4
+
+    prod:
+      type:     postgres
+      host:     "{{ env_var('PG_HOST') }}"
+      port:     5432
+      dbname:   "{{ env_var('PG_DB') }}"
+      schema:   bronze
+      user:     "{{ env_var('DBT_USER') }}"
+      password: "{{ env_var('DBT_PASSWORD') }}"
+      threads:  8

@@ -1,0 +1,33 @@
+name: 'healthcare_readmission'
+version: '1.0.0'
+config-version: 2
+
+profile: 'healthcare_readmission'
+
+model-paths:    ["models"]
+test-paths:     ["tests"]
+macro-paths:    ["macros"]
+seed-paths:     ["seeds"]
+analysis-paths: ["analyses"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  healthcare_readmission:
+
+    silver:
+      +schema:       silver
+      +materialized: view
+      +tags:         ['silver', 'nettoyage']
+      +docs:
+        node_color: "#3B82F6"
+
+    gold:
+      +schema:       gold
+      +materialized: table
+      +tags:         ['gold', 'analytique']
+      +docs:
+        node_color: "#F59E0B"
