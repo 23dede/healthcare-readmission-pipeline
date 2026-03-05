@@ -1,0 +1,415 @@
+-- =============================================================================
+-- DAX MEASURES -- Healthcare Readmission Risk Dashboard
+-- =============================================================================
+-- File    : powerbi/dax_measures.dax
+-- Project : Healthcare Readmission Risk Pipeline
+-- Tables  : mart_readmission_kpis, mart_patient_features, scores_risque_patients
+-- =============================================================================
+-- HOW TO IMPORT IN POWER BI DESKTOP
+-- 1. Open Power BI Desktop
+-- 2. Load Gold tables from PostgreSQL or CSV
+-- 3. Create an empty measures table: Modeling -> New table -> "_Mesures"
+-- 4. Copy-paste each measure via "New measure"
+-- =============================================================================
+
+
+-- =============================================================================
+-- SECTION 1 -- GLOBAL KPIs
+-- =============================================================================
+
+-- 1.1 Total stays
+[Total Sejours] =
+COUNTROWS( mart_patient_features )
+
+-- 1.2 Total readmissions
+[Total Readmissions] =
+CALCULATE(
+    COUNTROWS( mart_patient_features ),
+    mart_patient_features[readmission_30j] = 1
+)
+
+-- 1.3 Global readmission rate
+[Taux Readmission %] =
+DIVIDE(
+    [Total Readmissions],
+    [Total Sejours],
+    0
+)
+
+-- 1.4 Formatted readmission rate (text for KPI card)
+[Taux Readmission Label] =
+FORMAT( [Taux Readmission %], "0.0%" )
+
+-- 1.5 Average length of stay
+[Duree Moyenne Sejour (j)] =
+AVERAGEX(
+    mart_patient_features,
+    mart_patient_features[duree_sejour]
+)
+
+-- 1.6 Mean patient age
+[Age Moyen] =
+AVERAGE( mart_patient_features[age] )
+
+-- 1.7 Mean medication count (polypharmacy indicator)
+[Medicaments Moyen] =
+AVERAGE( mart_patient_features[nb_medicaments] )
+
+-- 1.8 Polypharmacy rate (5 or more medications)
+[Taux Polymedication %] =
+DIVIDE(
+    CALCULATE( COUNTROWS(mart_patient_features),
+               mart_patient_features[flag_polymedication] = 1 ),
+    [Total Sejours],
+    0
+)
+
+-- 1.9 Complex discharge rate (SSR / EHPAD / Transfer)
+[Taux Sortie Complexe %] =
+DIVIDE(
+    CALCULATE( COUNTROWS(mart_patient_features),
+               mart_patient_features[flag_sortie_complexe] = 1 ),
+    [Total Sejours],
+    0
+)
+
+
+-- =============================================================================
+-- SECTION 2 -- RISK SCORES
+-- =============================================================================
+
+-- 2.1 Mean predicted risk score
+[Score Risque Moyen] =
+AVERAGEX(
+    mart_patient_features,
+    mart_patient_features[score_risque_modele]
+)
+
+-- 2.2 High-risk patients (score >= 0.70)
+[Patients Risque Eleve] =
+CALCULATE(
+    COUNTROWS( mart_patient_features ),
+    mart_patient_features[score_risque_modele] >= 0.70
+)
+
+-- 2.3 Moderate-risk patients (0.40 <= score < 0.70)
+[Patients Risque Modere] =
+CALCULATE(
+    COUNTROWS( mart_patient_features ),
+    mart_patient_features[score_risque_modele] >= 0.40,
+    mart_patient_features[score_risque_modele] < 0.70
+)
+
+-- 2.4 Low-risk patients (score < 0.40)
+[Patients Risque Faible] =
+CALCULATE(
+    COUNTROWS( mart_patient_features ),
+    mart_patient_features[score_risque_modele] < 0.40
+)
+
+-- 2.5 % High-risk patients
+[% Patients Risque Eleve] =
+DIVIDE( [Patients Risque Eleve], [Total Sejours], 0 )
+
+-- 2.6 Maximum risk score in current selection
+[Score Risque Maximum] =
+MAXX(
+    mart_patient_features,
+    mart_patient_features[score_risque_modele]
+)
+
+-- 2.7 % Moderate-risk patients
+[% Patients Risque Modere] =
+DIVIDE( [Patients Risque Modere], [Total Sejours], 0 )
+
+-- 2.8 % Low-risk patients
+[% Patients Risque Faible] =
+DIVIDE( [Patients Risque Faible], [Total Sejours], 0 )
+
+
+-- =============================================================================
+-- SECTION 3 -- PATHOLOGY ANALYSIS
+-- =============================================================================
+
+-- 3.1 Readmission rate by pathology (filtered context)
+[Taux Readmission Pathologie] =
+CALCULATE(
+    [Taux Readmission %],
+    ALLEXCEPT( mart_patient_features, mart_patient_features[pathologie] )
+)
+
+-- 3.2 Deviation vs global average (in percentage points)
+[Ecart vs Moyenne Globale pp] =
+( [Taux Readmission %]
+  - CALCULATE( [Taux Readmission %], ALL(mart_patient_features) )
+) * 100
+
+-- 3.3 Pathology rank by readmission rate
+[Rang Pathologie] =
+RANKX(
+    ALL( mart_patient_features[pathologie] ),
+    [Taux Readmission %],
+    ,
+    DESC,
+    DENSE
+)
+
+-- 3.4 Highest-risk pathology (for KPI card)
+[Pathologie Plus Risquee] =
+TOPN(
+    1,
+    VALUES( mart_patient_features[pathologie] ),
+    CALCULATE( [Taux Readmission %],
+               ALLEXCEPT(mart_patient_features, mart_patient_features[pathologie]) )
+)
+
+-- 3.5 Mean complexity index by pathology
+[Indice Complexite Moy Pathologie] =
+AVERAGEX(
+    mart_patient_features,
+    mart_patient_features[indice_complexite]
+)
+
+
+-- =============================================================================
+-- SECTION 4 -- TIME INTELLIGENCE
+-- =============================================================================
+
+-- 4.1 Prior year readmission rate
+[Taux Readmission Annee Precedente] =
+CALCULATE(
+    [Taux Readmission %],
+    SAMEPERIODLASTYEAR( DimDate[Date] )
+)
+
+-- 4.2 Year-over-year delta (percentage points)
+[Delta Taux vs Annee Precedente (pp)] =
+( [Taux Readmission %] - [Taux Readmission Annee Precedente] ) * 100
+
+-- 4.3 Directional trend label for KPI card
+[Icone Tendance Annee] =
+VAR delta = [Delta Taux vs Annee Precedente (pp)]
+RETURN
+    SWITCH(
+        TRUE(),
+        ISBLANK(delta), "N/A",
+        delta > 0.5,    "up " & FORMAT(ABS(delta), "+0.0") & "pp",
+        delta < -0.5,   "down " & FORMAT(ABS(delta), "0.0") & "pp",
+        "stable " & FORMAT(delta, "+0.0") & "pp"
+    )
+
+-- 4.4 YTD readmission rate
+[Taux Readmission YTD] =
+CALCULATE(
+    [Taux Readmission %],
+    DATESYTD( DimDate[Date] )
+)
+
+-- 4.5 Readmissions over last 30 rolling days
+[Readmissions 30j Glissants] =
+CALCULATE(
+    [Total Readmissions],
+    DATESINPERIOD(
+        DimDate[Date],
+        LASTDATE( DimDate[Date] ),
+        -30, DAY
+    )
+)
+
+-- 4.6 Prior year stay count
+[Sejours Annee Precedente] =
+CALCULATE(
+    [Total Sejours],
+    SAMEPERIODLASTYEAR( DimDate[Date] )
+)
+
+-- 4.7 Prior month readmission rate
+[Taux Readmission Mois Precedent] =
+CALCULATE(
+    [Taux Readmission %],
+    DATEADD( DimDate[Date], -1, MONTH )
+)
+
+-- 4.8 Month-over-month delta
+[Delta Taux vs Mois Precedent] =
+[Taux Readmission %] - [Taux Readmission Mois Precedent]
+
+
+-- =============================================================================
+-- SECTION 5 -- DEMOGRAPHICS
+-- =============================================================================
+
+-- 5.1 Readmission rate for seniors (age >= 75)
+[Taux Readmission Seniors 75+] =
+CALCULATE(
+    [Taux Readmission %],
+    mart_patient_features[age] >= 75
+)
+
+-- 5.2 Share of patients aged 75 and over
+[% Patients Seniors 75+] =
+DIVIDE(
+    CALCULATE( [Total Sejours], mart_patient_features[age] >= 75 ),
+    [Total Sejours],
+    0
+)
+
+-- 5.3 Readmission rate for patients with heavy prior history
+[Taux Readmission Antecedents Lourds] =
+CALCULATE(
+    [Taux Readmission %],
+    mart_patient_features[flag_antecedents_lourds] = 1
+)
+
+-- 5.4 Male vs female readmission differential
+[Delta Readmission H vs F] =
+CALCULATE( [Taux Readmission %],
+           mart_patient_features[sexe] = "M" )
+- CALCULATE( [Taux Readmission %],
+             mart_patient_features[sexe] = "F" )
+
+-- 5.5 Male readmission rate
+[Taux Readmission Sexe M] =
+CALCULATE( [Taux Readmission %], mart_patient_features[sexe] = "M" )
+
+-- 5.6 Female readmission rate
+[Taux Readmission Sexe F] =
+CALCULATE( [Taux Readmission %], mart_patient_features[sexe] = "F" )
+
+
+-- =============================================================================
+-- SECTION 6 -- ALERTS AND THRESHOLDS
+-- =============================================================================
+
+-- 6.1 Alert color for conditional formatting
+[Couleur Alerte Taux] =
+SWITCH(
+    TRUE(),
+    [Taux Readmission %] >= 0.30, "#F44336",
+    [Taux Readmission %] >= 0.20, "#FF9800",
+    [Taux Readmission %] >= 0.15, "#FFC107",
+    "#4CAF50"
+)
+
+-- 6.2 Performance status (for KPI badge)
+[Statut Performance] =
+SWITCH(
+    TRUE(),
+    [Taux Readmission %] >= 0.30, "CRITIQUE",
+    [Taux Readmission %] >= 0.20, "ATTENTION",
+    [Taux Readmission %] >= 0.15, "SURVEILLANCE",
+    "NORMAL"
+)
+
+-- 6.3 Number of services above the 20% alert threshold
+[Services Au-Dessus Seuil] =
+COUNTROWS(
+    FILTER(
+        VALUES( mart_patient_features[service] ),
+        CALCULATE( [Taux Readmission %] ) >= 0.20
+    )
+)
+
+-- 6.4 Approximate KS statistic (score distribution separation)
+[Separation Scores (KS approx)] =
+VAR q90_pos =
+    CALCULATE(
+        PERCENTILE.INC( mart_patient_features[score_risque_modele], 0.9 ),
+        mart_patient_features[readmission_30j] = 1
+    )
+VAR q10_neg =
+    CALCULATE(
+        PERCENTILE.INC( mart_patient_features[score_risque_modele], 0.1 ),
+        mart_patient_features[readmission_30j] = 0
+    )
+RETURN
+    FORMAT( q90_pos - q10_neg, "0.000" )
+
+-- 6.5 Missed alerts: unalerted patients who were readmitted
+[Patients Non Alertes Rehospitalises %] =
+DIVIDE(
+    CALCULATE(
+        [Total Readmissions],
+        mart_patient_features[score_risque_modele] < 0.50
+    ),
+    [Total Readmissions],
+    0
+)
+
+
+-- =============================================================================
+-- SECTION 7 -- MODEL PERFORMANCE METRICS
+-- =============================================================================
+
+-- 7.1 True positives (score >= 0.50 AND readmission = 1)
+[Vrais Positifs] =
+CALCULATE(
+    COUNTROWS( mart_patient_features ),
+    mart_patient_features[score_risque_modele] >= 0.50,
+    mart_patient_features[readmission_30j] = 1
+)
+
+-- 7.2 False positives
+[Faux Positifs] =
+CALCULATE(
+    COUNTROWS( mart_patient_features ),
+    mart_patient_features[score_risque_modele] >= 0.50,
+    mart_patient_features[readmission_30j] = 0
+)
+
+-- 7.3 False negatives
+[Faux Negatifs] =
+CALCULATE(
+    COUNTROWS( mart_patient_features ),
+    mart_patient_features[score_risque_modele] < 0.50,
+    mart_patient_features[readmission_30j] = 1
+)
+
+-- 7.4 Model precision (PPV)
+[Precision Modele] =
+DIVIDE( [Vrais Positifs], [Vrais Positifs] + [Faux Positifs], 0 )
+
+-- 7.5 Model recall (sensitivity)
+[Rappel Modele] =
+DIVIDE( [Vrais Positifs], [Vrais Positifs] + [Faux Negatifs], 0 )
+
+-- 7.6 F1-Score
+[F1-Score Modele] =
+DIVIDE(
+    2 * [Precision Modele] * [Rappel Modele],
+    [Precision Modele] + [Rappel Modele],
+    0
+)
+
+-- 7.7 True negatives
+[Vrais Negatifs] =
+CALCULATE(
+    COUNTROWS( mart_patient_features ),
+    mart_patient_features[score_risque_modele] < 0.50,
+    mart_patient_features[readmission_30j] = 0
+)
+
+-- 7.8 Overall accuracy
+[Accuracy Modele] =
+DIVIDE(
+    [Vrais Positifs] + [Vrais Negatifs],
+    [Total Sejours],
+    0
+)
+
+-- 7.9 Specificity
+[Specificite Modele] =
+DIVIDE(
+    [Vrais Negatifs],
+    [Vrais Negatifs] + [Faux Positifs],
+    0
+)
+
+-- 7.10 Operational cost of false alerts (qualitative indicator)
+[Cout Operationnel Fausses Alertes] =
+SWITCH(
+    TRUE(),
+    [Faux Positifs] / [Total Sejours] > 0.25, "HIGH",
+    [Faux Positifs] / [Total Sejours] > 0.15, "MEDIUM",
+    "LOW"
+)
