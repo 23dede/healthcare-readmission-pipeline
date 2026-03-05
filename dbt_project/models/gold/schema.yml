@@ -1,0 +1,158 @@
+version: 2
+
+models:
+
+  - name: mart_patient_features
+    description: >
+      Gold table constituting the ML feature store for the prediction model.
+      Grain: 1 row = 1 patient stay with all numerical, binary and categorical
+      features ready for modeling. Consumed directly by the Python notebook
+      (03_prediction_model.ipynb).
+
+      Numerical features (10): age, nb_hospitalisations_precedentes,
+        nb_medicaments, duree_sejour, duree_zscore_patho, indice_complexite,
+        ratio_meds_duree, severite_normalisee, taux_readmission_patho, mois_admission.
+
+      Binary features (7): flag_polymedication, flag_sortie_complexe,
+        flag_deja_hospitalise, flag_antecedents_lourds, flag_long_sejour,
+        flag_pathologie_chronique, flag_pathologie_critique.
+
+      Categorical features (4): tranche_age, mode_sortie, service, groupe_clinique.
+
+    columns:
+
+      - name: patient_id
+        description: Functional primary key for the stay
+        tests:
+          - not_null
+          - unique
+
+      - name: readmission_30j
+        description: Binary target variable (0 = no readmission, 1 = readmitted)
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+
+      - name: age
+        description: Patient age (18-95)
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 18
+              max_value: 95
+
+      - name: nb_hospitalisations_precedentes
+        description: Prior hospitalizations in the 12 months before admission (0-10)
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10
+
+      - name: indice_complexite
+        description: Composite stay complexity score [0-10]
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10
+
+      - name: severite_normalisee
+        description: Normalized pathology severity [0-1]
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+
+      - name: flag_polymedication
+        description: 1 if patient takes 5 or more medications, 0 otherwise
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+
+      - name: flag_sortie_complexe
+        description: 1 if complex discharge mode (SSR, EHPAD, Transfer), 0 otherwise
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+
+      - name: flag_deja_hospitalise
+        description: 1 if at least one prior hospitalization, 0 otherwise
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+
+      - name: flag_antecedents_lourds
+        description: 1 if 3 or more hospitalizations in 12 months, 0 otherwise
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+
+      - name: groupe_clinique
+        description: Clinical group of the pathology
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['CARDIO', 'PULMO', 'METABOL', 'NEPHRO', 'NEURO', 'INFECTIO', 'TRAUMA', 'AUTRE']
+
+      - name: tranche_age
+        description: Clinical age bracket
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['18-44', '45-64', '65-74', '75-84', '85+']
+
+  - name: mart_readmission_kpis
+    description: >
+      Gold table in long format containing readmission KPIs aggregated across
+      5 dimensions: pathology, service, region, age bracket, and admission month.
+      Directly consumed by the Power BI dashboard without additional DAX aggregation.
+      Grain: 1 row = 1 dimension-value combination.
+
+    columns:
+
+      - name: dimension
+        description: Analysis dimension name (pathologie, service, region, tranche_age, mois)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['pathologie', 'service', 'region', 'tranche_age', 'mois']
+
+      - name: valeur
+        description: Dimension value (e.g. 'Cardiologie', 'Ile-de-France', '2024-03')
+        tests:
+          - not_null
+
+      - name: nb_sejours
+        description: Total number of stays for this dimension/value
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+
+      - name: nb_readmissions
+        description: Number of observed readmissions
+        tests:
+          - not_null
+
+      - name: taux_readmission
+        description: Readmission rate [0-1]
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+
+      - name: indice_complexite_moy
+        description: Average complexity index of stays [0-10]
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10
