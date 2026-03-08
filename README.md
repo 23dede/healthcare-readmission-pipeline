@@ -14,6 +14,11 @@ The report connects directly to the Gold layer output and provides three analyti
 readmission risk monitoring by service and pathology, patient risk scoring dashboard,
 and operational KPI tracking with year-over-year comparison and alert thresholds.
 
+| Évolution des réhospitalisations par date | Réhospitalisations par pathologie et service |
+|:---:|:---:|
+| ![Évolution des réhospitalisations par date](%C3%89volution%20des%20r%C3%A9hospitalisations%20par%20date.png) | ![Réhospitalisations par pathologie et service](R%C3%A9hospitalisations%20par%20pathologie%20et%20service.png) |
+| Fluctuation mensuelle du nombre total de réhospitalisations sur 2022 | Comparaison des réhospitalisations par pathologie et service hospitalier |
+
 ---
 
 ## Problem Statement
