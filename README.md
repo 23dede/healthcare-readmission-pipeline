@@ -14,10 +14,33 @@ The report connects directly to the Gold layer output and provides three analyti
 readmission risk monitoring by service and pathology, patient risk scoring dashboard,
 and operational KPI tracking with year-over-year comparison and alert thresholds.
 
-| Évolution des réhospitalisations par date | Réhospitalisations par pathologie et service |
-|:---:|:---:|
-| ![Évolution des réhospitalisations par date](%C3%89volution%20des%20r%C3%A9hospitalisations%20par%20date.png) | ![Réhospitalisations par pathologie et service](R%C3%A9hospitalisations%20par%20pathologie%20et%20service.png) |
-| Fluctuation mensuelle du nombre total de réhospitalisations sur 2022 | Comparaison des réhospitalisations par pathologie et service hospitalier |
+**Évolution des réhospitalisations par date**
+
+![Évolution des réhospitalisations par date](%C3%89volution%20des%20r%C3%A9hospitalisations%20par%20date.png)
+
+This line chart tracks the total number of readmissions month by month throughout 2022.
+Each point on the curve represents the count of patients who were readmitted to hospital
+within 30 days of a prior discharge for a given month. The visualization reveals how
+readmission volume fluctuates over time: a period of relative stability from April to
+July is followed by a gradual increase through the fall, peaking in November before
+dropping sharply. This temporal view is useful for detecting seasonal patterns,
+identifying anomalous months that may warrant investigation, and evaluating whether
+prevention measures introduced at a specific date had a measurable impact on the trend.
+
+**Réhospitalisations par pathologie et service**
+
+![Réhospitalisations par pathologie et service](R%C3%A9hospitalisations%20par%20pathologie%20et%20service.png)
+
+This stacked bar chart compares the total number of readmissions across two pathologies
+(Fracture col fémur and Pneumonie) broken down by hospital service (Cardiologie,
+Chirurgie ortho, Diabétologie, Gériatrie, Neurologie, Pneumologie, Réanimation).
+Each colored segment represents the contribution of one service to the overall readmission
+count for that pathology. The chart makes it immediately visible which services account
+for the largest share of readmissions within each condition, and whether the distribution
+of services differs between pathologies. For example, a heavier weight from Gériatrie or
+Réanimation in one pathology compared to the other would signal that specific care pathways
+require targeted intervention. This breakdown is essential for hospital managers and
+service heads to prioritize resources and reduce avoidable readmissions at the department level.
 
 ---
 
