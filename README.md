@@ -5,6 +5,17 @@ Architecture: Medallion (Bronze / Silver / Gold) -- dbt -- PostgreSQL -- Python 
 
 ---
 
+## Power BI Report
+
+> **[Download project_medical.pbix](https://github.com/23dede/healthcare-readmission-pipeline/raw/main/project_medical.pbix)**
+> 56 DAX measures -- 7 folders -- 4 RLS roles -- DimDate 2022-2027
+
+The report connects directly to the Gold layer output and provides three analytical views:
+readmission risk monitoring by service and pathology, patient risk scoring dashboard,
+and operational KPI tracking with year-over-year comparison and alert thresholds.
+
+---
+
 ## Problem Statement
 
 Unplanned hospital readmissions within 30 days of discharge represent one of the most
@@ -124,6 +135,7 @@ healthcare-readmission-pipeline/
 |-- README.md
 |-- requirements.txt
 |-- load_bronze.py
+|-- project_medical.pbix          <- Power BI report (download above)
 |
 |-- dbt_project/
 |   |-- dbt_project.yml
