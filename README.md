@@ -1,46 +1,158 @@
 # Healthcare Readmission Pipeline
 
 End-to-end analytics pipeline for 30-day hospital readmission risk prediction.
-Architecture: Medallion (Bronze / Silver / Gold) -- dbt -- PostgreSQL -- Python -- Power BI.
+Architecture: Medallion (Bronze / Silver / Gold) — dbt — PostgreSQL — Python — Power BI.
 
 ---
 
 ## Power BI Report
 
-> **[Download project_medical.pbix](https://github.com/23dede/healthcare-readmission-pipeline/raw/main/project_medical.pbix)**
-> 56 DAX measures -- 7 folders -- 4 RLS roles -- DimDate 2022-2027
+> **[Download project_medica_version.pbix](https://github.com/23dede/healthcare-readmission-pipeline/raw/main/project_medica_version.pbix)**
+> 56 DAX measures — 7 folders — 4 RLS roles — DimDate 2022–2027
 
-The report connects directly to the Gold layer output and provides three analytical views:
-readmission risk monitoring by service and pathology, patient risk scoring dashboard,
-and operational KPI tracking with year-over-year comparison and alert thresholds.
+The report connects directly to the Gold layer output and provides two analytical dashboards:
+a general readmission overview with KPIs and time trends, and a deep-dive analysis by pathology
+and hospital service.
 
-**Évolution des réhospitalisations par date**
+---
 
-![Évolution des réhospitalisations par date](%C3%89volution%20des%20r%C3%A9hospitalisations%20par%20date.png)
+## Dashboard 1 — General Readmission Overview
 
-This line chart tracks the total number of readmissions month by month throughout 2022.
-Each point on the curve represents the count of patients who were readmitted to hospital
-within 30 days of a prior discharge for a given month. The visualization reveals how
-readmission volume fluctuates over time: a period of relative stability from April to
-July is followed by a gradual increase through the fall, peaking in November before
-dropping sharply. This temporal view is useful for detecting seasonal patterns,
-identifying anomalous months that may warrant investigation, and evaluating whether
-prevention measures introduced at a specific date had a measurable impact on the trend.
+![General Readmission Overview](Vue%20G%C3%A9n%C3%A9rale%20des%20Readmissions.png)
 
-**Réhospitalisations par pathologie et service**
+This dashboard provides a high-level view of hospital readmission activity across the entire patient population.
+It is designed for hospital directors and risk analysts who need a quick, reliable summary of the current
+readmission situation.
 
-![Réhospitalisations par pathologie et service](R%C3%A9hospitalisations%20par%20pathologie%20et%20service.png)
+### Chart — Total Readmissions by Admission Date (line chart, top left)
 
-This stacked bar chart compares the total number of readmissions across two pathologies
-(Fracture col fémur and Pneumonie) broken down by hospital service (Cardiologie,
-Chirurgie ortho, Diabétologie, Gériatrie, Neurologie, Pneumologie, Réanimation).
-Each colored segment represents the contribution of one service to the overall readmission
-count for that pathology. The chart makes it immediately visible which services account
-for the largest share of readmissions within each condition, and whether the distribution
-of services differs between pathologies. For example, a heavier weight from Gériatrie or
-Réanimation in one pathology compared to the other would signal that specific care pathways
-require targeted intervention. This breakdown is essential for hospital managers and
-service heads to prioritize resources and reduce avoidable readmissions at the department level.
+The line chart plots the total number of readmissions on the vertical axis against admission dates on the
+horizontal axis, covering a period from early July to late July. Each data point on the curve represents
+the number of patients readmitted on a given date. The line shows a marked decline from around 9–10
+readmissions per day in early July down to approximately 7–8 in mid-July, followed by a sharp recovery
+peaking at 10 around July 17, before dropping again toward the end of the month. This temporal view is
+critical for detecting daily or weekly spikes that may signal capacity stress, staffing shortfalls, or
+the failure of a discharge prevention protocol. A sustained upward trend across several consecutive days
+would trigger a management review.
+
+### Chart — Total Stays by Risk Category (donut chart, top center)
+
+The donut chart breaks down all recorded hospital stays into three risk tiers. The dominant segment (in
+blue) represents the **Low risk** category, which accounts for the vast majority of stays. The **Very
+low risk** (orange) and **Moderate risk** (purple) segments are smaller slices. Exact percentages are
+displayed on each arc: Very low 11.58%, Moderate 10.83%, with the remainder being Low. This distribution
+confirms that the model correctly identifies most stays as low risk while isolating a meaningful subset
+of higher-risk patients who warrant targeted intervention before discharge.
+
+### Chart — Readmission Rate by Pathology (horizontal bar chart, bottom left)
+
+This chart ranks two pathologies — **Hip fracture** (Fracture col femur) and **Pneumonia** (Pneumonie)
+— by their respective readmission rates as a percentage. Each bar has a small error band visible around
+it, indicating that the rate estimate carries some variability. Hip fracture shows a slightly higher
+readmission rate than pneumonia. For hospital managers, this means that orthopedic and geriatric
+pathways require more intensive post-discharge follow-up than respiratory ones, based on current data.
+
+### Chart — Total Stays by Admission Season (bar chart, bottom center)
+
+Four vertical bars represent the four seasons: Summer (Été), Spring (Printemps), Autumn (Automne),
+and Winter (Hiver). All bars reach approximately 300 stays, indicating that admission volume is
+relatively uniform across seasons. The summer bar appears marginally taller in darker shading,
+possibly reflecting a slightly higher case load. The absence of a strong seasonal effect simplifies
+capacity planning, though month-level filtering is still recommended to detect sub-seasonal peaks.
+
+### KPI Cards (right panel)
+
+| KPI card | Value | Meaning |
+|---|---|---|
+| Total Stays | 301 | Total number of hospital stays recorded in the dataset |
+| Total Readmissions | 64 | Number of patients readmitted within 30 days of discharge |
+| Readmission Rate | 21.3% | Proportion of stays followed by a readmission within 30 days |
+| Average Length of Stay | 14.9 days | Mean duration of a hospital stay across all records |
+
+A **21.3% readmission rate** is above the French national average benchmark of ~15%, indicating that
+the synthetic patient population modeled here represents a high-risk cohort, consistent with the
+pathology mix used in data generation.
+
+---
+
+## Dashboard 2 — Analysis by Pathology and Service
+
+![Analysis by Pathology and Service](Analyse%20par%20Pathologie%20%26%20Service.png)
+
+This dashboard provides a clinical decomposition of the readmission risk profile across pathologies
+and hospital services. It is intended for department heads, service managers, and clinical risk analysts
+who need to understand which patient groups drive the most risk and how resources should be allocated.
+
+### Chart — Average Risk Score by Pathology (horizontal bar chart, top left)
+
+Each horizontal bar represents one of eight pathologies, ranked by average risk score from highest
+to lowest. The pathologies covered are: Hip fracture (Fracture col femur), Pneumonia, Ischemic stroke
+(AVC ischemique), Heart failure (Insuffisance cardiaque), Type 2 diabetes (Diabete de type 2), COPD
+(BPCO), Sepsis, and Chronic kidney disease (IRC). Hip fracture and Pneumonia display the longest bars,
+indicating the highest average predicted risk scores. This ranking directly informs which patient
+cohorts should be prioritized by discharge prevention teams. A high average risk score means that, on
+average, patients admitted with that condition are predicted to have a significant probability of
+returning within 30 days.
+
+### Chart — Average Age and Average Complexity Index by Pathology (scatter plot, top center)
+
+Each dot on the scatter plot represents one pathology. The horizontal axis shows average patient age
+at admission, ranging from approximately 55.5 to 57.5 years. The vertical axis shows the average
+complexity index, ranging from roughly 3 to 5. The complexity index is a composite score that reflects
+the clinical difficulty of a stay, derived from the number of prescribed medications, number of prior
+hospitalizations, and discharge mode. Dots positioned in the upper-right quadrant represent pathologies
+with both older patients and higher complexity — those are the highest-priority segments for care
+coordination. The scatter plot reveals whether age alone or overall complexity is the primary driver
+of risk, guiding both clinical and administrative decisions.
+
+### Chart — Average Prior Hospitalizations by Clinical Group (pie chart, top right)
+
+The pie chart divides patients into clinical groups: TRAUMA, NEURO, METABOL, PULMO, CARDIO, INFECTIO,
+NEPHRO. Each slice shows the average number of prior hospitalizations (in the last 12 months) for
+patients in that group. The labels display the average value alongside the percentage of the total.
+CARDIO and INFECTIO show the largest average prior hospitalization counts, confirming that cardiac and
+infectious disease patients carry a heavier history of repeated admissions. Prior hospitalization count
+is one of the strongest predictors in the logistic regression model, so clinical groups with high values
+here warrant dedicated readmission prevention protocols.
+
+### Chart — Average Medications by Pathology (bar chart, bottom left)
+
+This vertical bar chart plots the average number of medications prescribed per stay for each pathology.
+COPD (BPCO), Ischemic stroke (AVC isc.), and Heart failure (Insuffis.) show the highest bars, indicating
+that patients with these conditions receive more complex medication regimens. A higher medication count
+is associated with increased polypharmacy risk, adherence difficulties post-discharge, and higher
+readmission probability. This chart helps pharmacists and discharge coordinators focus their
+reconciliation efforts on the most medication-intensive pathologies.
+
+### Chart — Average Complexity Index by Service (treemap, bottom left)
+
+The treemap divides the hospital into services — Neurologie, Geriatrie, Cardiologie, Diabetologie,
+Reanimation, Pneumologie, Chirurgie ortho — and sizes each tile proportionally to its average
+complexity index. Color coding adds a second layer of differentiation. Larger, more intensely colored
+tiles represent services where admitted patients tend to have more complex stays. Reanimation and
+Neurologie tiles are among the largest, confirming that intensive care and neurology departments handle
+the most complex patient profiles. This directly informs staffing ratios and discharge planning resources.
+
+### Chart — Total Stays by Discharge Mode (donut chart, bottom center)
+
+The donut chart shows how patients leave the hospital, split into five discharge modes:
+EHPAD (nursing home), Home (Domicile), SSR (rehabilitation center), Transfer, and Death (Deces).
+Each slice is roughly equal in size at approximately 20% each, indicating that no single discharge
+pathway dominates. The balance between home discharge and institutional discharge (EHPAD, SSR,
+Transfer) is clinically significant: patients discharged to SSR or EHPAD have different readmission
+risk profiles than those sent home, and the model captures this through the discharge mode feature.
+
+### KPI Cards (right panel)
+
+| KPI card | Value | Meaning |
+|---|---|---|
+| Critical Alert Patients | 96 | Patients whose risk score exceeds the critical alert threshold |
+| Complex Discharge Rate | 80.0% | Proportion of stays with a non-home discharge mode |
+| Moderate Risk Patients | 96 | Patients classified in the moderate risk tier |
+
+The **80% complex discharge rate** is notably high and reflects the synthetic patient population's
+design: older, multi-morbid patients with high prior hospitalization counts tend to require structured
+post-acute care rather than direct home discharge.
 
 ---
 
@@ -68,7 +180,7 @@ care services, or extend the hospital stay when clinically justified.
 This project builds a complete data pipeline from raw data ingestion to a Power BI
 business intelligence layer, structured around three analytical stages:
 
-**Stage 1 -- Data Engineering (Bronze and Silver layers)**
+**Stage 1 — Data Engineering (Bronze and Silver layers)**
 
 Raw synthetic patient data is generated using the Python Faker library and ingested
 into PostgreSQL. The Silver layer, implemented in dbt, applies data cleaning, type
@@ -76,7 +188,7 @@ casting, deduplication, and feature derivation. Three staging models are produce
 patient demographics, stay metrics, and diagnostic enrichment via a simplified
 ICD-10 reference table.
 
-**Stage 2 -- Machine Learning and Statistical Analysis (Gold layer and Python notebooks)**
+**Stage 2 — Machine Learning and Statistical Analysis (Gold layer and Python notebooks)**
 
 The Gold layer consolidates the Silver models into a feature store table consumed
 by the prediction pipeline. Three Jupyter notebooks cover exploratory data analysis,
@@ -84,7 +196,7 @@ statistical validation of features (chi-square, Mann-Whitney, VIF), and a logist
 regression model with stratified cross-validation. The model outputs a continuous
 risk score between 0 and 1 for each patient stay.
 
-**Stage 3 -- Business Intelligence (Power BI)**
+**Stage 3 — Business Intelligence (Power BI)**
 
 The risk scores and aggregated KPIs are exposed in a Power BI semantic model
 with 56 DAX measures organized into 7 folders, row-level security for 4 user
@@ -121,20 +233,20 @@ Source: Synthetic hospital data (Python / Faker)
   v
 Bronze Layer
   load_bronze.py
-  PostgreSQL -- schema: bronze
+  PostgreSQL — schema: bronze
   Table: bronze.patients_raw
-  No transformation -- raw ingestion with timestamp logging
+  No transformation — raw ingestion with timestamp logging
   |
   v
 Silver Layer
-  dbt models -- materialized as views
+  dbt models — materialized as views
   stg_patients     : type casting, normalization, quality filters
   stg_sejours      : stay metrics, complexity index, risk flags
   stg_diagnostics  : ICD-10 enrichment, clinical group mapping
   |
   v
 Gold Layer
-  dbt models -- materialized as tables
+  dbt models — materialized as tables
   mart_patient_features : feature store for ML (21 features)
   mart_readmission_kpis : pre-aggregated KPIs for Power BI (5 dimensions)
   |
@@ -163,7 +275,7 @@ healthcare-readmission-pipeline/
 |-- README.md
 |-- requirements.txt
 |-- load_bronze.py
-|-- project_medical.pbix          <- Power BI report (download above)
+|-- project_medica_version.pbix     <- Power BI report (download above)
 |
 |-- dbt_project/
 |   |-- dbt_project.yml
@@ -212,13 +324,13 @@ with the French hospital system (GHM / ICD-10).
 | Variable                        | Type        | Description                              |
 |---------------------------------|-------------|------------------------------------------|
 | patient_id                      | UUID        | Unique stay identifier                   |
-| age                             | Integer     | Patient age at admission (18-95)         |
+| age                             | Integer     | Patient age at admission (18–95)         |
 | sexe                            | Categorical | M / F                                    |
 | pathologie                      | Categorical | Heart failure, COPD, Diabetes, etc.      |
 | diagnostic_principal            | String      | Simplified ICD-10 code                   |
 | service                         | Categorical | Cardiology, Pulmonology, etc.            |
 | hopital_region                  | Categorical | French administrative region             |
-| duree_sejour                    | Integer     | Length of stay in days (1-45)            |
+| duree_sejour                    | Integer     | Length of stay in days (1–45)            |
 | nb_hospitalisations_precedentes | Integer     | Prior hospitalizations (12-month window) |
 | nb_medicaments                  | Integer     | Number of prescribed medications         |
 | mode_sortie                     | Categorical | Home, SSR, EHPAD, Transfer, Death        |
@@ -245,7 +357,7 @@ The modeling pipeline follows a rigorous statistical workflow:
 4. Kruskal-Wallis test for age distribution across pathology groups.
 
 5. Logistic regression with class_weight='balanced' to handle the natural
-   class imbalance (approximately 25-30% positive class). Pipeline includes
+   class imbalance (approximately 25–30% positive class). Pipeline includes
    StandardScaler for numerical features and OneHotEncoder for categorical features.
 
 6. Validation via stratified 5-fold cross-validation. Bootstrap confidence
@@ -328,7 +440,7 @@ The third notebook exports scores_risque_patients.csv, which feeds the Power BI 
 
 Load mart_patient_features, mart_readmission_kpis, and scores_risque_patients.csv
 into Power BI Desktop. DAX measures are documented in powerbi/dax_measures.dax.
-The semantic model requires a DimDate table (2022-2027) and a DimUtilisateurs
+The semantic model requires a DimDate table (2022–2027) and a DimUtilisateurs
 mapping table for dynamic RLS.
 
 ---
@@ -337,20 +449,115 @@ mapping table for dynamic RLS.
 
 The Power BI layer contains 56 DAX measures organized in 7 folders:
 
-- KPIs Globaux: total stays, readmission rate, average length of stay, age, medications
-- Scores de Risque: risk score distribution, high/moderate/low risk patient counts
-- Analyse Pathologie: pathology-level rates, deviation from global average, ranking
-- Analyse Temporelle: YTD, rolling 30 days, year-over-year delta, trend label
-- Demographie: senior (75+) rates, prior hospitalizations, male vs. female differential
-- Alertes et Seuils: alert color encoding, performance status, services above threshold
-- Metriques Modele: confusion matrix components, precision, recall, F1, KS statistic
+- Global KPIs: total stays, readmission rate, average length of stay, age, medications
+- Risk Scores: risk score distribution, high/moderate/low risk patient counts
+- Pathology Analysis: pathology-level rates, deviation from global average, ranking
+- Time Analysis: YTD, rolling 30 days, year-over-year delta, trend label
+- Demographics: senior (75+) rates, prior hospitalizations, male vs. female differential
+- Alerts and Thresholds: alert color encoding, performance status, services above threshold
+- Model Metrics: confusion matrix components, precision, recall, F1, KS statistic
 
 Row-level security is implemented for four roles:
 
-- Direction_Hopital: unrestricted access
-- Responsable_Service: filtered to the user's service via USERPRINCIPALNAME() lookup
-- Analyste_Risques: filtered to patients with risk score >= 0.40
-- Medecin_Traitant: filtered to the user's service via USERPRINCIPALNAME() lookup
+- Direction_Hopital (Hospital Management): unrestricted access to all data
+- Responsable_Service (Department Manager): filtered to the user's service via USERPRINCIPALNAME()
+- Analyste_Risques (Risk Analyst): filtered to patients with risk score >= 0.40
+- Medecin_Traitant (Attending Physician): filtered to the user's service via USERPRINCIPALNAME()
+
+---
+
+## Glossary — French to English Reference
+
+This section translates all French labels used in the Power BI dashboards and data pipeline.
+Use this as a reference guide when reading charts, axis labels, and field names.
+
+### Dashboard Labels
+
+| French label | English translation | Context |
+|---|---|---|
+| Réhospitalisation | Readmission | A patient returning to hospital within 30 days of discharge |
+| Séjour | Hospital stay | One recorded hospital admission episode |
+| Pathologie | Pathology / Medical condition | The primary diagnosis driving the admission |
+| Service | Hospital department / Ward | The clinical unit where the patient was treated |
+| Date d'admission | Admission date | The date the patient entered the hospital |
+| Mode de sortie | Discharge mode | How the patient left the hospital |
+| Taux de réhospitalisation | Readmission rate | Percentage of stays followed by readmission within 30 days |
+| Durée moyenne de séjour | Average length of stay | Mean number of days spent in hospital |
+| Score de risque | Risk score | Predicted probability of readmission (0 to 1) |
+| Indice de complexité | Complexity index | Composite score of clinical difficulty for a stay |
+| Hospitalisations précédentes | Prior hospitalizations | Number of admissions in the 12 months before current stay |
+| Médicaments | Medications | Number of drugs prescribed during the stay |
+| Groupe clinique | Clinical group | Broader category grouping related pathologies |
+| Catégorie de risque | Risk category | Tier classification: Low, Very Low, Moderate |
+| Saison d'admission | Admission season | Season in which the stay was recorded |
+| Patients alerte critique | Critical alert patients | Patients whose risk score exceeds the critical threshold |
+| Taux sortie complexe | Complex discharge rate | Share of stays with a non-home discharge mode |
+| Patients modérés | Moderate risk patients | Patients classified in the moderate risk tier |
+| Âge moyen | Average age | Mean patient age across a group |
+
+### Pathology Names
+
+| French name | English name | Clinical description |
+|---|---|---|
+| Fracture col fémur | Hip fracture | Fracture of the femoral neck, common in elderly patients |
+| Pneumonie | Pneumonia | Lung infection causing fluid accumulation in air sacs |
+| AVC ischémique | Ischemic stroke | Brain blood supply blocked by a clot |
+| Insuffisance cardiaque | Heart failure | Heart unable to pump sufficient blood to meet body demands |
+| Diabète de type 2 | Type 2 diabetes | Chronic metabolic disorder with elevated blood glucose |
+| BPCO | COPD (Chronic Obstructive Pulmonary Disease) | Progressive lung disease causing airflow obstruction |
+| Sepsis | Sepsis | Life-threatening immune response to infection |
+| IRC | CKD (Chronic Kidney Disease) | Progressive loss of kidney function over time |
+
+### Clinical Groups (groupe_clinique)
+
+| French code | English meaning |
+|---|---|
+| TRAUMA | Trauma (fractures, orthopedic injuries) |
+| NEURO | Neurology (stroke, neurological conditions) |
+| METABOL | Metabolic (diabetes, endocrine disorders) |
+| PULMO | Pulmonology (respiratory diseases, COPD, pneumonia) |
+| CARDIO | Cardiology (heart failure, cardiac conditions) |
+| INFECTIO | Infectiology (sepsis, infectious diseases) |
+| NEPHRO | Nephrology (chronic kidney disease, renal conditions) |
+
+### Hospital Services (service)
+
+| French name | English name |
+|---|---|
+| Cardiologie | Cardiology |
+| Chirurgie ortho | Orthopedic surgery |
+| Diabétologie | Diabetology / Endocrinology |
+| Gériatrie | Geriatrics |
+| Neurologie | Neurology |
+| Pneumologie | Pulmonology |
+| Réanimation | Intensive Care Unit (ICU) |
+
+### Discharge Modes (mode_sortie)
+
+| French name | English name | Description |
+|---|---|---|
+| Domicile | Home | Patient discharged directly to their home |
+| EHPAD | Nursing home | Residential care facility for dependent elderly patients |
+| SSR | Rehabilitation center | Specialized post-acute rehabilitation unit |
+| Transfert | Transfer | Patient moved to another hospital or unit |
+| Décès | Death | Patient died during the stay |
+
+### Risk Category Labels (catégorie_risque)
+
+| French label | English label | Meaning |
+|---|---|---|
+| Faible | Low risk | Predicted readmission probability below the low threshold |
+| Très faible | Very low risk | Predicted readmission probability at the minimum range |
+| Modéré | Moderate risk | Predicted readmission probability in the intermediate range |
+
+### Seasons (saison_admission)
+
+| French | English |
+|---|---|
+| Été | Summer |
+| Printemps | Spring |
+| Automne | Autumn |
+| Hiver | Winter |
 
 ---
 
